@@ -192,7 +192,7 @@ namespace SportPlac.Controllers
                 query = query.Where(x => x.IsVerified == verified);
 
             var result = await query
-                .Select(s => new StoreDto
+                .Select(s => new StoreDTO
                 {
                     Id = s.Id,
                     Name = s.Name,

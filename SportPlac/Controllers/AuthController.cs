@@ -158,7 +158,7 @@ namespace SportPlac.Controllers
                     ProfileImageUrl = u.ProfileImageUrl,
                     City = u.City,
 
-                    Store = u.Store != null ? new StoreDto
+                    Store = u.Store != null ? new StoreDTO
                     {
                         Id = u.Store.Id,
                         Name = u.Store.Name
@@ -237,6 +237,6 @@ namespace SportPlac.Controllers
             return Ok(user);
         }
 
-
+z
     }
 }
