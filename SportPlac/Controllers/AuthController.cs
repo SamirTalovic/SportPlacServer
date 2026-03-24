@@ -236,7 +236,5 @@ namespace SportPlac.Controllers
 
             return Ok(user);
         }
-
-z
     }
 }
