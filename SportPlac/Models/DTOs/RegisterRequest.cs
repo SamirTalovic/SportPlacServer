@@ -12,5 +12,6 @@
         public string? City { get; set; }
 
         public string StoreName { get; set; }
+        public IFormFile? ProfileImage { get; set; }
     }
 }
