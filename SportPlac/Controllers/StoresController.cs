@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using SportPlac.Data;
 using SportPlac.Models.DTOs;
 using SportPlac.Services;
+using System.Security.Claims;
 
 namespace SportPlac.Controllers
 {
@@ -86,32 +87,49 @@ namespace SportPlac.Controllers
         [HttpGet("me")]
         public async Task<IActionResult> GetMyStore()
         {
-            var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+            try 
+            {
+                var userIdClaim = User.FindFirst("sub")?.Value 
+                               ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value 
+                               ?? User.FindFirst("id")?.Value;
 
-            var store = await _context.Stores
-                .Where(s => s.UserId == userId)
-                .Select(s => new StoreDTO
-                {
-                    Id = s.Id,
-                    Name = s.Name,
-                    Description = s.Description,
-                    Location = s.Location,
-                    AvatarUrl = s.AvatarUrl,
-                    IsVerified = s.IsVerified,
-                    TotalSales = s.TotalSales,
-                    ResponseRate = s.ResponseRate,
-                    ListingsCount = s.Listings.Count,
-                    ReviewsCount = s.Reviews.Count
-                })
-                .FirstOrDefaultAsync();
+                if (string.IsNullOrEmpty(userIdClaim)) 
+                    return Unauthorized("User ID claim not found in token. Please log out and log in again.");
 
-            return Ok(store);
+                if (!Guid.TryParse(userIdClaim, out Guid userId))
+                    return BadRequest($"Invalid User ID format in token: {userIdClaim}");
+
+                var store = await _context.Stores
+                    .Where(s => s.UserId == userId)
+                    .Select(s => new StoreDTO
+                    {
+                        Id = s.Id,
+                        Name = s.Name,
+                        Description = s.Description ?? "",
+                        Location = s.Location ?? "",
+                        AvatarUrl = s.AvatarUrl,
+                        IsVerified = s.IsVerified,
+                        TotalSales = s.TotalSales,
+                        ResponseRate = s.ResponseRate,
+                        ListingsCount = s.Listings != null ? s.Listings.Count : 0,
+                        ReviewsCount = s.Reviews != null ? s.Reviews.Count : 0
+                    })
+                    .FirstOrDefaultAsync();
+
+                return Ok(store);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Internal server error: {ex.Message}");
+            }
         }
         [Authorize]
         [HttpPut]
         public async Task<IActionResult> UpdateStore(UpdateStoreDto dto)
         {
-            var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+            var userIdClaim = User.FindFirst("sub")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim)) return Unauthorized("User ID not found in token");
+            var userId = Guid.Parse(userIdClaim);
 
             var store = await _context.Stores
                 .FirstOrDefaultAsync(s => s.UserId == userId);
@@ -131,7 +149,9 @@ namespace SportPlac.Controllers
         [HttpPost("avatar")]
         public async Task<IActionResult> UploadAvatar(IFormFile file)
         {
-            var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+            var userIdClaim = User.FindFirst("sub")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            if (string.IsNullOrEmpty(userIdClaim)) return Unauthorized("User ID not found in token");
+            var userId = Guid.Parse(userIdClaim);
 
             var store = await _context.Stores
                 .FirstOrDefaultAsync(s => s.UserId == userId);
@@ -209,4 +229,3 @@ namespace SportPlac.Controllers
 
 
 }
-    
