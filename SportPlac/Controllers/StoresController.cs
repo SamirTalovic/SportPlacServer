@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SportPlac.Data;
+using SportPlac.Models;
 using SportPlac.Models.DTOs;
 using SportPlac.Services;
 
@@ -202,7 +203,76 @@ namespace SportPlac.Controllers
 
             return Ok(result);
         }
+        [Authorize]
+        [HttpPost("{id}/like")]
+        public async Task<IActionResult> LikeStore(Guid id)
+        {
+            var userId = Guid.Parse(User.FindFirst("sub")!.Value);
 
+            var store = await _context.Stores
+                .Where(s => s.Id == id)
+                .Select(s => new { s.Id, s.UserId, s.Name })
+                .FirstOrDefaultAsync();
+
+            if (store == null)
+                return NotFound("Store not found");
+
+
+            if (store.UserId == userId)
+                return BadRequest("You cannot like your own store");
+
+           
+            var exists = await _context.Likes
+                .AnyAsync(l => l.UserId == userId && l.StoreId == id);
+
+            if (exists)
+                return BadRequest("Already liked");
+
+            var like = new Like
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                StoreId = id
+            };
+
+            _context.Likes.Add(like);
+
+          
+            var notification = new Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = store.UserId, 
+                Type = NotificationType.Like,
+                Title = "Novi lajk",
+                Message = $"Neko je lajkovao tvoj store: {store.Name}",
+                ReferenceId = id.ToString()
+            };
+
+            _context.Notifications.Add(notification);
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Store liked" });
+        }
+
+        [Authorize]
+        [HttpDelete("{id}/like")]
+        public async Task<IActionResult> UnlikeStore(Guid id)
+        {
+            var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+
+            var like = await _context.Likes
+                .FirstOrDefaultAsync(l => l.UserId == userId && l.StoreId == id);
+
+            if (like == null)
+                return NotFound("Like not found");
+
+            _context.Likes.Remove(like);
+
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Like removed" });
+        }
 
 
     }
