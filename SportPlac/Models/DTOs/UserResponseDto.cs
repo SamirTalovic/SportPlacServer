@@ -8,18 +8,13 @@
         public string? ProfileImageUrl { get; set; }
         public string City { get; set; }
 
-        public StoreDto? Store { get; set; }
+        public StoreDTO? Store { get; set; }
         public List<string> Roles { get; set; }
 
         public int ListingsCount { get; set; }
         public int ReviewsCount { get; set; }
     }
 
-    public class StoreDto
-    {
-        public Guid Id { get; set; }
-        public string Name { get; set; }
-        public  bool IsVerified { get; set; }
-    }
+
 
 }
