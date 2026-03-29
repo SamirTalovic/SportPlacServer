@@ -15,6 +15,7 @@ builder.Services.AddControllers()
         // Preserve object references to avoid circular JSON serialization issues
         options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.Preserve;
     });
+builder.Services.AddSignalR();
 builder.Services.AddScoped<JwtService>();
 builder.Services.AddScoped<CloudinaryService>();
 builder.Services.AddAuthentication("Bearer")
@@ -58,13 +59,12 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-
 app.UseCors("AllowAll");
 app.UseDeveloperExceptionPage();
 
 app.UseAuthentication();
 app.UseAuthorization();
-
+app.MapHub<ChatHub>("/chatHub");
 app.MapControllers();
 
 app.Run();
