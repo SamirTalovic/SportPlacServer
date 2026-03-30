@@ -27,10 +27,30 @@ namespace SportPlac.Controllers
             _cloudinary = cloudinary;
         }
 
+        [HttpGet("count/unread")]
+        public async Task<IActionResult> GetUnreadCount()
+        {
+            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
+                          ?? User.FindFirst("sub")?.Value;
+            if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
+            var userId = Guid.Parse(userIdStr);
+
+            var unreadCount = await _context.ConversationParticipants
+                .Where(cp => cp.UserId == userId)
+                .SumAsync(cp => cp.UnreadCount);
+
+            return Ok(unreadCount);
+        }
+
         [HttpGet]
         public async Task<IActionResult> GetConversations()
         {
-            var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
+                          ?? User.FindFirst("sub")?.Value;
+
+            if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
+
+            var userId = Guid.Parse(userIdStr);
 
             var data = await _context.ConversationParticipants
                 .Where(cp => cp.UserId == userId)
@@ -80,7 +100,10 @@ namespace SportPlac.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateConversation(Guid listingId)
         {
-            var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
+                          ?? User.FindFirst("sub")?.Value;
+            if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
+            var userId = Guid.Parse(userIdStr);
 
             var listing = await _context.Listings
                 .Select(l => new { l.Id, l.SellerId })
@@ -124,12 +147,12 @@ namespace SportPlac.Controllers
             return Ok(convo.Id);
         }
         [HttpPost("{id}/messages")]
-        public async Task<IActionResult> SendMessage(
-    Guid id,
-    [FromForm] string text,
-    IFormFile? file)
+        public async Task<IActionResult> SendMessage(Guid id, [FromForm] string text, IFormFile? file)
         {
-            var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
+                          ?? User.FindFirst("sub")?.Value;
+            if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
+            var userId = Guid.Parse(userIdStr);
 
             var isParticipant = await _context.ConversationParticipants
                 .AnyAsync(p => p.ConversationId == id && p.UserId == userId);
@@ -185,7 +208,10 @@ namespace SportPlac.Controllers
         [HttpPatch("{id}/read")]
         public async Task<IActionResult> MarkAsRead(Guid id)
         {
-            var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
+                          ?? User.FindFirst("sub")?.Value;
+            if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
+            var userId = Guid.Parse(userIdStr);
 
             var participant = await _context.ConversationParticipants
                 .FirstOrDefaultAsync(p => p.ConversationId == id && p.UserId == userId);

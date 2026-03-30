@@ -23,7 +23,11 @@ namespace SportPlac.Controllers
     int page = 1,
     int pageSize = 10)
         {
-            var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
+                          ?? User.FindFirst("sub")?.Value;
+            if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
+
+            var userId = Guid.Parse(userIdStr);
 
             var query = _context.Notifications
                 .AsNoTracking()
@@ -54,7 +58,11 @@ namespace SportPlac.Controllers
         [HttpGet("unread-count")]
         public async Task<IActionResult> GetUnreadCount()
         {
-            var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
+                          ?? User.FindFirst("sub")?.Value;
+            if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
+
+            var userId = Guid.Parse(userIdStr);
 
             var count = await _context.Notifications
                 .CountAsync(n => n.UserId == userId && !n.IsRead);
@@ -65,7 +73,11 @@ namespace SportPlac.Controllers
         [HttpPatch("{id}/read")]
         public async Task<IActionResult> MarkAsRead(Guid id)
         {
-            var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
+                          ?? User.FindFirst("sub")?.Value;
+            if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
+
+            var userId = Guid.Parse(userIdStr);
 
             var notification = await _context.Notifications
                 .FirstOrDefaultAsync(n => n.Id == id && n.UserId == userId);
@@ -83,7 +95,11 @@ namespace SportPlac.Controllers
         [HttpPatch("read-all")]
         public async Task<IActionResult> MarkAllAsRead()
         {
-            var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
+                          ?? User.FindFirst("sub")?.Value;
+            if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
+
+            var userId = Guid.Parse(userIdStr);
 
             var notifications = await _context.Notifications
                 .Where(n => n.UserId == userId && !n.IsRead)

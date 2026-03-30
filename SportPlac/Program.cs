@@ -18,6 +18,7 @@ builder.Services.AddControllers()
 builder.Services.AddSignalR();
 builder.Services.AddScoped<JwtService>();
 builder.Services.AddScoped<CloudinaryService>();
+builder.Services.AddScoped<ISettingsService, SettingsService>();
 builder.Services.AddAuthentication("Bearer")
     .AddJwtBearer("Bearer", options =>
     {

@@ -112,7 +112,10 @@ namespace SportPlac.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateListing([FromForm] CreateListingDto dto)
         {
-            var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
+                          ?? User.FindFirst("sub")?.Value;
+            if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
+            var userId = Guid.Parse(userIdStr);
 
             var store = await _context.Stores
                 .FirstOrDefaultAsync(s => s.UserId == userId);
@@ -179,7 +182,10 @@ namespace SportPlac.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateListing(Guid id, CreateListingDto dto)
         {
-            var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
+                          ?? User.FindFirst("sub")?.Value;
+            if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
+            var userId = Guid.Parse(userIdStr);
 
             var listing = await _context.Listings
                 .Include(l => l.Tags)
@@ -211,7 +217,10 @@ namespace SportPlac.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteListing(Guid id)
         {
-            var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
+                          ?? User.FindFirst("sub")?.Value;
+            if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
+            var userId = Guid.Parse(userIdStr);
 
             var listing = await _context.Listings
                 .Include(l => l.Images)
@@ -237,7 +246,10 @@ namespace SportPlac.Controllers
         [HttpPatch("{id}/status")]
         public async Task<IActionResult> ChangeStatus(Guid id, ListingStatus status)
         {
-            var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
+                          ?? User.FindFirst("sub")?.Value;
+            if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
+            var userId = Guid.Parse(userIdStr);
 
             var listing = await _context.Listings
                 .FirstOrDefaultAsync(l => l.Id == id && l.SellerId == userId);
@@ -254,7 +266,10 @@ namespace SportPlac.Controllers
         [HttpPost("{id}/promote")]
         public async Task<IActionResult> Promote(Guid id)
         {
-            var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
+                          ?? User.FindFirst("sub")?.Value;
+            if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
+            var userId = Guid.Parse(userIdStr);
 
             var listing = await _context.Listings
                 .FirstOrDefaultAsync(l => l.Id == id && l.SellerId == userId);
@@ -272,7 +287,10 @@ namespace SportPlac.Controllers
         [HttpPost("{id}/like")]
         public async Task<IActionResult> Like(Guid id)
         {
-            var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
+                          ?? User.FindFirst("sub")?.Value;
+            if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
+            var userId = Guid.Parse(userIdStr);
 
             var exists = await _context.Likes
                 .AnyAsync(l => l.UserId == userId && l.ListingId == id);
@@ -295,7 +313,10 @@ namespace SportPlac.Controllers
         [HttpDelete("{id}/like")]
         public async Task<IActionResult> Unlike(Guid id)
         {
-            var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
+                          ?? User.FindFirst("sub")?.Value;
+            if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
+            var userId = Guid.Parse(userIdStr);
 
             var like = await _context.Likes
                 .FirstOrDefaultAsync(l => l.UserId == userId && l.ListingId == id);
@@ -312,7 +333,10 @@ namespace SportPlac.Controllers
         [HttpPost("{id}/report")]
         public async Task<IActionResult> Report(Guid id, string reason)
         {
-            var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
+                          ?? User.FindFirst("sub")?.Value;
+            if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
+            var userId = Guid.Parse(userIdStr);
 
             _context.ListingReports.Add(new ListingReport
             {
@@ -333,7 +357,10 @@ namespace SportPlac.Controllers
         [HttpGet("my")]
         public async Task<IActionResult> MyListings()
         {
-            var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
+                          ?? User.FindFirst("sub")?.Value;
+            if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
+            var userId = Guid.Parse(userIdStr);
 
             var listings = await _context.Listings
                 .Where(l => l.SellerId == userId)

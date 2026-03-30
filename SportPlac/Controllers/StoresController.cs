@@ -227,7 +227,10 @@ namespace SportPlac.Controllers
         [HttpPost("{id}/like")]
         public async Task<IActionResult> LikeStore(Guid id)
         {
-            var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
+                          ?? User.FindFirst("sub")?.Value;
+            if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
+            var userId = Guid.Parse(userIdStr);
 
             var store = await _context.Stores
                 .Where(s => s.Id == id)
@@ -279,7 +282,10 @@ namespace SportPlac.Controllers
         [HttpDelete("{id}/like")]
         public async Task<IActionResult> UnlikeStore(Guid id)
         {
-            var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
+                          ?? User.FindFirst("sub")?.Value;
+            if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
+            var userId = Guid.Parse(userIdStr);
 
             var like = await _context.Likes
                 .FirstOrDefaultAsync(l => l.UserId == userId && l.StoreId == id);

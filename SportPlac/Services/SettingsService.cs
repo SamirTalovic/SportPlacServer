@@ -24,7 +24,17 @@ namespace SportPlac.Services
                 .FirstOrDefaultAsync();
 
             if (settings == null)
-                throw new Exception("Settings not initialized");
+            {
+                // Vrati podrazumevana podešavanja ako baza nije inicijalizovana
+                return new SiteSettings
+                {
+                    MetaPixelId = "",
+                    GooglePixelId = "",
+                    AutoWebPConversion = true,
+                    SeoImageRenamer = true,
+                    UpdatedAt = DateTime.UtcNow
+                };
+            }
 
             return settings;
         }

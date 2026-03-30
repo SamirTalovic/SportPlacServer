@@ -24,19 +24,28 @@ namespace SportPlac.Controllers
         [HttpGet("dashboard")]
         public async Task<IActionResult> Dashboard()
         {
-            var totalUsers = await _context.Users.CountAsync();
-            var totalListings = await _context.Listings.CountAsync();
-
-            // fake revenue (ako nemaš payments)
-            var revenue = await _context.Subscriptions
-                .SumAsync(s => (decimal?)s.Amount) ?? 0;
-
-            return Ok(new
+            try 
             {
-                totalUsers,
-                totalListings,
-                revenue
-            });
+                var totalUsers = await _context.Users.CountAsync();
+                var totalListings = await _context.Listings.CountAsync();
+                var totalStores = await _context.Stores.CountAsync();
+
+                // Sumiranje prihoda - koristimo decimal? za sigurnost
+                var revenue = await _context.Subscriptions
+                    .SumAsync(s => (decimal?)s.Amount) ?? 0;
+
+                return Ok(new
+                {
+                    totalUsers,
+                    totalListings,
+                    totalStores,
+                    revenue
+                });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, $"Interna greška: {ex.Message}");
+            }
         }
         [HttpGet("users")]
         public async Task<IActionResult> Users(string? search, int page = 1, int pageSize = 10)
