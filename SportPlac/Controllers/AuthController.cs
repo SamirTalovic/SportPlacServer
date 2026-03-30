@@ -75,6 +75,7 @@ namespace SportPlac.Controllers
         public async Task<IActionResult> Login(LoginRequest request)
         {
             var user = await _context.Users
+                .Include(u => u.Roles)
                 .FirstOrDefaultAsync(x => x.Email == request.Email);
 
             if (user == null)
