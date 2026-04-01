@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SportPlac.Data;
@@ -147,10 +147,42 @@ namespace SportPlac.Controllers
         [HttpDelete("listings/{id}")]
         public async Task<IActionResult> DeleteListing(Guid id)
         {
-            var listing = await _context.Listings.FindAsync(id);
+            var listing = await _context.Listings
+                .Include(l => l.Images)
+                .Include(l => l.Reports)
+                .Include(l => l.Tags)
+                .FirstOrDefaultAsync(l => l.Id == id);
+
             if (listing == null) return NotFound();
 
+            var conversations = await _context.Conversations
+                .Where(c => c.ListingId == id)
+                .ToListAsync();
+            
+            foreach (var conv in conversations)
+            {
+                var messages = await _context.Messages
+                    .Where(m => m.ConversationId == conv.Id)
+                    .ToListAsync();
+                _context.Messages.RemoveRange(messages);
+
+                var participants = await _context.ConversationParticipants
+                    .Where(cp => cp.ConversationId == conv.Id)
+                    .ToListAsync();
+                _context.ConversationParticipants.RemoveRange(participants);
+            }
+
+            _context.Conversations.RemoveRange(conversations);
+
+            var likes = await _context.Likes.Where(l => l.ListingId == id).ToListAsync();
+            _context.Likes.RemoveRange(likes);
+
+            _context.ListingImages.RemoveRange(listing.Images);
+            _context.ListingReports.RemoveRange(listing.Reports);
+            _context.ListingTags.RemoveRange(listing.Tags);
+
             _context.Listings.Remove(listing);
+
             await _context.SaveChangesAsync();
 
             return Ok();
@@ -193,7 +225,6 @@ namespace SportPlac.Controllers
             settings.AutoWebPConversion = dto.AutoWebPConversion;
             settings.SeoImageRenamer = dto.SeoImageRenamer;
 
-            // ❌ IGNORIŠEMO BANCA INTESA (po zahtevu)
             settings.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
