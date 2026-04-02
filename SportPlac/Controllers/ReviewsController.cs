@@ -1,9 +1,10 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SportPlac.Data;
 using SportPlac.Models;
 using SportPlac.Models.DTOs;
+using System.Security.Claims;
 
 namespace SportPlac.Controllers
 {
@@ -51,7 +52,9 @@ namespace SportPlac.Controllers
         [HttpPost("stores/{id}/reviews")]
         public async Task<IActionResult> CreateReview(Guid id, CreateReviewDto dto)
         {
-            var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("sub");
+            if (userIdClaim == null) return Unauthorized();
+            var userId = Guid.Parse(userIdClaim.Value);
 
             // validacija rating
             if (dto.Rating < 1 || dto.Rating > 5)
@@ -107,7 +110,9 @@ namespace SportPlac.Controllers
         [HttpDelete("reviews/{id}")]
         public async Task<IActionResult> DeleteReview(Guid id)
         {
-            var userId = Guid.Parse(User.FindFirst("sub")!.Value);
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("sub");
+            if (userIdClaim == null) return Unauthorized();
+            var userId = Guid.Parse(userIdClaim.Value);
 
             var review = await _context.Reviews
                 .FirstOrDefaultAsync(r => r.Id == id);
