@@ -66,6 +66,8 @@ app.UseDeveloperExceptionPage();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapHub<ChatHub>("/chatHub");
+app.MapHub<NotificationHub>("/notificationHub");
+app.MapHub<ListingHub>("/listingHub");
 app.MapControllers();
 
 app.Run();

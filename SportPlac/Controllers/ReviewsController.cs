@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using SportPlac.Data;
 using SportPlac.Models;
 using SportPlac.Models.DTOs;
+using SportPlac.Services;
 using System.Security.Claims;
 
 namespace SportPlac.Controllers
@@ -14,10 +16,12 @@ namespace SportPlac.Controllers
     public class ReviewsController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly IHubContext<NotificationHub> _notificationHub;
 
-        public ReviewsController(AppDbContext context)
+        public ReviewsController(AppDbContext context, IHubContext<NotificationHub> notificaion)
         {
             _context = context;
+            _notificationHub = notificaion;
         }
         [AllowAnonymous]
         [HttpGet("stores/{id}/reviews")]
@@ -56,22 +60,19 @@ namespace SportPlac.Controllers
             if (userIdClaim == null) return Unauthorized();
             var userId = Guid.Parse(userIdClaim.Value);
 
-            // validacija rating
             if (dto.Rating < 1 || dto.Rating > 5)
                 return BadRequest("Rating must be between 1 and 5");
 
             var store = await _context.Stores
-                .Select(s => new { s.Id, s.UserId })
+                .Select(s => new { s.Id, s.UserId, s.Name })
                 .FirstOrDefaultAsync(s => s.Id == id);
 
             if (store == null)
                 return NotFound("Store not found");
 
-            // ❌ ne možeš oceniti sebe
             if (store.UserId == userId)
                 return BadRequest("You cannot review your own store");
 
-            // ❌ jedan review po useru
             var exists = await _context.Reviews
                 .AnyAsync(r => r.StoreId == id && r.ReviewerId == userId);
 
@@ -90,7 +91,7 @@ namespace SportPlac.Controllers
 
             _context.Reviews.Add(review);
 
-            // 🔥 update store rating (ResponseRate možeš koristiti kao avg rating)
+            // ⭐ UPDATE AVG RATING
             var ratings = await _context.Reviews
                 .Where(r => r.StoreId == id)
                 .Select(r => r.Rating)
@@ -103,10 +104,37 @@ namespace SportPlac.Controllers
             var storeEntity = await _context.Stores.FindAsync(id);
             storeEntity.ResponseRate = avg;
 
+            // 🔔 NOTIFIKACIJA
+            var notification = new Notification
+            {
+                Id = Guid.NewGuid(),
+                UserId = store.UserId,
+                Type = NotificationType.Review,
+                Title = "Nova recenzija",
+                Message = $"Dobio si novu ocenu ({dto.Rating}) za prodavnicu {store.Name}",
+                ReferenceId = id.ToString(),
+                IsRead = false
+            };
+
+            _context.Notifications.Add(notification);
+
             await _context.SaveChangesAsync();
+
+            // ⚡ REALTIME SOCKET
+            await _notificationHub.Clients
+                .Group(store.UserId.ToString())
+                .SendAsync("ReceiveNotification", new
+                {
+                    notification.Id,
+                    notification.Title,
+                    notification.Message,
+                    notification.Type,
+                    notification.CreatedAt
+                });
 
             return Ok(review.Id);
         }
+
         [HttpDelete("reviews/{id}")]
         public async Task<IActionResult> DeleteReview(Guid id)
         {

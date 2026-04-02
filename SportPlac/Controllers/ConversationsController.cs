@@ -231,6 +231,50 @@ namespace SportPlac.Controllers
 
             return Ok();
         }
+        [HttpDelete("messages/{messageId}")]
+        public async Task<IActionResult> DeleteMessage(Guid messageId)
+        {
+            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                          ?? User.FindFirst("sub")?.Value;
+
+            if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
+            var userId = Guid.Parse(userIdStr);
+
+            var message = await _context.Messages
+                .FirstOrDefaultAsync(m => m.Id == messageId);
+
+            if (message == null)
+                return NotFound();
+
+            // 🔒 SAMO SENDER SME DA BRIŠE
+            if (message.SenderId != userId)
+                return Forbid();
+
+            var conversationId = message.ConversationId;
+
+            _context.Messages.Remove(message);
+            await _context.SaveChangesAsync();
+
+            // 🔥 update last message
+            var lastMessage = await _context.Messages
+                .Where(m => m.ConversationId == conversationId)
+                .OrderByDescending(m => m.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            var convo = await _context.Conversations.FindAsync(conversationId);
+
+            convo.LastMessageAt = lastMessage?.CreatedAt;
+
+            await _context.SaveChangesAsync();
+
+            await _hub.Clients.Group(conversationId.ToString())
+                .SendAsync("MessageDeleted", new
+                {
+                    MessageId = messageId
+                });
+
+            return Ok();
+        }
 
 
     }

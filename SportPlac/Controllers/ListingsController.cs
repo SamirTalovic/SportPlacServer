@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using SportPlac.Data;
 using SportPlac.Models;
@@ -14,11 +15,13 @@ namespace SportPlac.Controllers
     {
         private readonly AppDbContext _context;
         private readonly CloudinaryService _cloudinary;
+        private readonly IHubContext<ListingHub> _listingHub;
 
-        public ListingsController(AppDbContext context, CloudinaryService cloudinary)
+        public ListingsController(AppDbContext context, CloudinaryService cloudinary,IHubContext<ListingHub> listingHub)
         {
             _context = context;
             _cloudinary = cloudinary;
+            _listingHub = listingHub;
         }
 
         [HttpGet]
@@ -175,6 +178,21 @@ namespace SportPlac.Controllers
             }
 
             await _context.SaveChangesAsync();
+
+            await _listingHub.Clients.All.SendAsync("NewListing", new
+            {
+                listing.Id,
+                listing.Title,
+                listing.Price,
+                listing.Location,
+                listing.CreatedAt,
+                Store = new
+                {
+                    store.Id,
+                    store.Name
+                },
+                Image = listing.Images.FirstOrDefault()?.ImageUrl
+            });
 
             return Ok(listing.Id);
         }
