@@ -196,17 +196,18 @@ namespace SportPlac.Controllers
 
             return Ok(listing.Id);
         }
-        [Authorize]
+         [Authorize]
         [HttpPut("{id}")]
-        public async Task<IActionResult> UpdateListing(Guid id, CreateListingDto dto)
+public async Task<IActionResult> UpdateListing(Guid id, [FromForm] CreateListingDto dto)
         {
-            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
+            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
                           ?? User.FindFirst("sub")?.Value;
             if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
             var userId = Guid.Parse(userIdStr);
 
             var listing = await _context.Listings
                 .Include(l => l.Tags)
+                .Include(l => l.Images)
                 .FirstOrDefaultAsync(l => l.Id == id && l.SellerId == userId);
 
             if (listing == null) return NotFound();
@@ -216,7 +217,7 @@ namespace SportPlac.Controllers
             listing.Price = dto.Price;
             listing.Location = dto.Location;
 
-            // update tags
+            // 🔥 TAGS UPDATE
             listing.Tags.Clear();
             if (dto.Tags != null)
             {
@@ -227,10 +228,50 @@ namespace SportPlac.Controllers
                 }).ToList();
             }
 
+            // 🔥 IMAGES UPDATE
+            if (dto.Images != null && dto.Images.Count > 8)
+                return BadRequest("Max 8 images");
+
+            if (dto.Images != null && dto.Images.Count > 0)
+            {
+                // obriši stare slike
+                _context.ListingImages.RemoveRange(listing.Images);
+
+                listing.Images.Clear();
+
+                int order = 0;
+
+                foreach (var file in dto.Images)
+                {
+                    var url = await _cloudinary.UploadImageAsync(file);
+
+                    listing.Images.Add(new ListingImage
+                    {
+                        Id = Guid.NewGuid(),
+                        ImageUrl = url,
+                        SortOrder = order,
+                        IsPrimary = order == 0
+                    });
+
+                    order++;
+                }
+            }
+
             await _context.SaveChangesAsync();
+
+            // 🔥 SOCKET
+            await _listingHub.Clients.All.SendAsync("ListingUpdated", new
+            {
+                listing.Id,
+                listing.Title,
+                listing.Price,
+                listing.Location,
+                Image = listing.Images.FirstOrDefault()?.ImageUrl
+            });
 
             return Ok();
         }
+
         [Authorize]
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteListing(Guid id)
