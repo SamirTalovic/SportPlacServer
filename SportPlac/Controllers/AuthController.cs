@@ -221,21 +221,43 @@ namespace SportPlac.Controllers
         }
         [Authorize]
         [HttpPut("{id}")]
-        public async Task<IActionResult> UpdateUser(Guid id, UpdateUserDto dto)
+        public async Task<IActionResult> UpdateUser(Guid id, [FromForm] UpdateUserDto dto, IFormFile? profileImage)
         {
-            var user = await _context.Users.FindAsync(id);
+            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                          ?? User.FindFirst("sub")?.Value;
 
-            if (user == null)
-                return NotFound();
+            if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
+            var userId = Guid.Parse(userIdStr);
+
+            // 🔒 user može menjati samo sebe
+            if (userId != id)
+                return Forbid();
+
+            var user = await _context.Users.FindAsync(id);
+            if (user == null) return NotFound();
 
             user.FirstName = dto.FirstName;
             user.LastName = dto.LastName;
             user.Phone = dto.Phone;
             user.City = dto.City;
 
+            // 🔥 PROFILE IMAGE UPDATE
+            if (profileImage != null)
+            {
+                var url = await _cloudinaryService.UploadImageAsync(profileImage);
+                user.ProfileImageUrl = url;
+            }
+
             await _context.SaveChangesAsync();
 
-            return Ok(user);
+            return Ok(new
+            {
+                user.Id,
+                user.FirstName,
+                user.LastName,
+                user.ProfileImageUrl
+            });
         }
+
     }
 }
