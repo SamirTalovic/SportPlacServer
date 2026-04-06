@@ -1,4 +1,4 @@
-﻿namespace SportPlac.Models
+namespace SportPlac.Models
 {
     public class User
     {

@@ -9,7 +9,7 @@
         public string? AttachmentUrl { get; set; }
         public bool IsRead { get; set; } = false;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-
+    
         public Conversation Conversation { get; set; } = null!;
         public User Sender { get; set; } = null!;
     }
