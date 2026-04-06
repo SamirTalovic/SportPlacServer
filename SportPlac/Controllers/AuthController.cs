@@ -7,6 +7,7 @@ using SportPlac.Data;
 using SportPlac.Models;
 using SportPlac.Models.DTOs;
 using SportPlac.Services;
+using SportPlac.Services.SportPlac.Services;
 
 namespace SportPlac.Controllers
 {
@@ -18,13 +19,15 @@ namespace SportPlac.Controllers
         private readonly JwtService _jwt;
         private readonly CloudinaryService _cloudinaryService;
         private readonly PasswordHasher<User> _passwordHasher;
+        private readonly EmailService _emailService;
 
-        public AuthController(AppDbContext context, JwtService jwt, CloudinaryService cloudinaryService)
+        public AuthController(AppDbContext context, JwtService jwt, CloudinaryService cloudinaryService, EmailService emailService)
         {
             _context = context;
             _jwt = jwt;
             _passwordHasher = new PasswordHasher<User>();
             _cloudinaryService = cloudinaryService;
+            _emailService = emailService;
         }
 
         [HttpPost("register")]
@@ -65,6 +68,43 @@ namespace SportPlac.Controllers
             _context.Stores.Add(store);
 
             await _context.SaveChangesAsync();
+
+            // 📧 SEND WELCOME EMAIL
+            try
+            {
+                var subject = "Dobrodošao na SportPlac 🎉";
+
+                var body = $@"
+        <h2>Zdravo {user.FirstName},</h2>
+
+        <p>Uspešno si se registrovao na <b>SportPlac</b> platformu.</p>
+
+        <p>Sada možeš:</p>
+        <ul>
+            <li>Postavljati oglase</li>
+            <li>Komunicirati sa kupcima</li>
+            <li>Prodavati svoje proizvode</li>
+        </ul>
+
+        <br/>
+
+        <p>Tvoja prodavnica: <b>{store.Name}</b> je već kreirana ✅</p>
+
+        <br/>
+
+        <p>Srećna prodaja! 🚀</p>
+
+        <hr/>
+        <small>SportPlac tim</small>
+    ";
+
+                await _emailService.SendEmailAsync(user.Email, subject, body);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Email error: " + ex.Message);
+            }
+
 
             var token = _jwt.GenerateToken(user);
 

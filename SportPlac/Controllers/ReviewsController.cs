@@ -6,6 +6,7 @@ using SportPlac.Data;
 using SportPlac.Models;
 using SportPlac.Models.DTOs;
 using SportPlac.Services;
+using SportPlac.Services.SportPlac.Services;
 using System.Security.Claims;
 
 namespace SportPlac.Controllers
@@ -17,11 +18,14 @@ namespace SportPlac.Controllers
     {
         private readonly AppDbContext _context;
         private readonly IHubContext<NotificationHub> _notificationHub;
+        private readonly EmailService _emailService;
 
-        public ReviewsController(AppDbContext context, IHubContext<NotificationHub> notificaion)
+        public ReviewsController(AppDbContext context, IHubContext<NotificationHub> notificaion, EmailService emailService)
         {
             _context = context;
             _notificationHub = notificaion;
+            _emailService = emailService;
+
         }
         [AllowAnonymous]
         [HttpGet("stores/{id}/reviews")]
