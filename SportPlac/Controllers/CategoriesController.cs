@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using SportPlac.Data;
@@ -101,18 +101,19 @@ namespace SportPlac.Controllers
 
             if (category == null) return NotFound();
 
-            // opcija 1: blokiraj ako ima listinga
+            // Proveri da li kategorija ili BILO KOJA njena podkategorija ima oglase
+            var subIds = category.Subcategories.Select(s => s.Id).ToList();
             var hasListings = await _context.Listings
-                .AnyAsync(l => l.CategoryId == id);
+                .AnyAsync(l => l.CategoryId == id || (l.SubcategoryId != null && subIds.Contains(l.SubcategoryId.Value)));
 
             if (hasListings)
-                return BadRequest("Category has listings");
+                return BadRequest("Kategorija ili njene podkategorije sadrže oglase i ne mogu biti obrisane.");
 
+            // Obrisi sve podkategorije (uključujući i decu zbog konfigulacije ili ručno)
             _context.Subcategories.RemoveRange(category.Subcategories);
             _context.Categories.Remove(category);
 
             await _context.SaveChangesAsync();
-
             return Ok();
         }
 
@@ -141,20 +142,38 @@ namespace SportPlac.Controllers
         [HttpDelete("{id}/subcategories/{subId}")]
         public async Task<IActionResult> DeleteSubcategory(Guid id, Guid subId)
         {
-            var sub = await _context.Subcategories
-                .FirstOrDefaultAsync(s => s.Id == subId && s.CategoryId == id);
+            // Pronađi podkategoriju i svu njenu decu (rekurzivno)
+            var allSubs = await _context.Subcategories.Where(s => s.CategoryId == id).ToListAsync();
+            var subToDelete = allSubs.FirstOrDefault(s => s.Id == subId);
 
-            if (sub == null) return NotFound();
+            if (subToDelete == null) return NotFound();
 
-            // proveri da li ima listinga
+            // Funkcija za skupljanje svih ID-jeva u stablu
+            var idsToDelete = new List<Guid> { subId };
+            void CollectChildren(Guid parentId)
+            {
+                var children = allSubs.Where(s => s.ParentId == parentId).Select(s => s.Id).ToList();
+                foreach (var childId in children)
+                {
+                    idsToDelete.Add(childId);
+                    CollectChildren(childId);
+                }
+            }
+            CollectChildren(subId);
+
+            // Proveri oglase za sve ove ID-jeve
             var hasListings = await _context.Listings
-                .AnyAsync(l => l.SubcategoryId == subId);
+                .AnyAsync(l => l.SubcategoryId != null && idsToDelete.Contains(l.SubcategoryId.Value));
 
             if (hasListings)
-                return BadRequest("Subcategory has listings");
+                return BadRequest("Podkategorija ili njeni pod-elementi sadrže oglase.");
 
-            _context.Subcategories.Remove(sub);
+            // Brisanje od dece ka roditelju da bi se izbegao FK conflict
+            var itemsToRemove = allSubs.Where(s => idsToDelete.Contains(s.Id))
+                                       .OrderByDescending(s => s.ParentId != null) // Ovo je gruba aproksimacija
+                                       .ToList();
 
+            _context.Subcategories.RemoveRange(itemsToRemove);
             await _context.SaveChangesAsync();
 
             return Ok();

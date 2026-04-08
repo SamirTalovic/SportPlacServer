@@ -41,10 +41,18 @@ namespace SportPlac.Controllers
                 query = query.Where(l => l.Title.Contains(search));
 
             if (categoryId.HasValue)
-                query = query.Where(l => l.CategoryId == categoryId);
+            {
+                // If filtering by root category, we include all subcategories under it
+                var subIds = await GetAllDescendantIds(null, categoryId.Value);
+                query = query.Where(l => l.CategoryId == categoryId || (l.SubcategoryId != null && subIds.Contains(l.SubcategoryId.Value)));
+            }
 
             if (subcategoryId.HasValue)
-                query = query.Where(l => l.SubcategoryId == subcategoryId);
+            {
+                // If filtering by subcategory, we include it and all its children recursively
+                var subIds = await GetAllDescendantIds(subcategoryId.Value);
+                query = query.Where(l => l.SubcategoryId == subcategoryId || (l.SubcategoryId != null && subIds.Contains(l.SubcategoryId.Value)));
+            }
 
             if (minPrice.HasValue)
                 query = query.Where(l => l.Price >= minPrice);
@@ -135,21 +143,22 @@ namespace SportPlac.Controllers
                 .FirstOrDefaultAsync(s => s.UserId == userId);
 
             if (store == null) return BadRequest("Store not found");
-
             var listing = new Listing
             {
                 Id = Guid.NewGuid(),
                 Title = dto.Title,
                 Description = dto.Description,
                 Price = dto.Price,
-                Currency = dto.Currency,
+                Currency = dto.Currency ?? "RSD",
+                Location = dto.Location,
                 CategoryId = dto.CategoryId,
                 SubcategoryId = dto.SubcategoryId,
-                Location = dto.Location,
                 Condition = dto.Condition,
                 Brand = dto.Brand,
                 SellerId = userId,
-                StoreId = store.Id
+                StoreId = store.Id,
+                Status = ListingStatus.Active,
+                CreatedAt = DateTime.UtcNow
             };
 
             _context.Listings.Add(listing);
@@ -455,6 +464,46 @@ namespace SportPlac.Controllers
                 .ToListAsync();
 
             return Ok(listings);
+        }
+
+        private async Task<List<Guid>> GetAllDescendantIds(Guid? parentSubId, Guid? categoryId = null)
+        {
+            var allIds = new List<Guid>();
+            
+            // Fetch all subcategories once to build tree in memory (efficient for small/medium trees)
+            var allSubcategories = await _context.Subcategories.AsNoTracking().ToListAsync();
+
+            void AddChildren(Guid parentId)
+            {
+                var children = allSubcategories.Where(s => s.ParentId == parentId).Select(s => s.Id).ToList();
+                foreach (var childId in children)
+                {
+                    if (!allIds.Contains(childId))
+                    {
+                        allIds.Add(childId);
+                        AddChildren(childId);
+                    }
+                }
+            }
+
+            if (parentSubId.HasValue)
+            {
+                AddChildren(parentSubId.Value);
+            }
+            else if (categoryId.HasValue)
+            {
+                var roots = allSubcategories.Where(s => s.CategoryId == categoryId && s.ParentId == null).Select(s => s.Id).ToList();
+                foreach (var rId in roots)
+                {
+                    if (!allIds.Contains(rId))
+                    {
+                        allIds.Add(rId);
+                        AddChildren(rId);
+                    }
+                }
+            }
+
+            return allIds;
         }
     }
 }
