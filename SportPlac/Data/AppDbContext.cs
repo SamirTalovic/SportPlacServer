@@ -38,12 +38,19 @@ namespace SportPlac.Data
 
                 e.HasOne(u => u.Store)
                     .WithOne(s => s.User)
-                    .HasForeignKey<Store>(s => s.UserId);
+                    .HasForeignKey<Store>(s => s.UserId)
+                     .OnDelete(DeleteBehavior.Cascade); 
 
                 e.HasOne(u => u.Subscription)
                     .WithOne(s => s.User)
                     .HasForeignKey<Subscription>(s => s.UserId);
             });
+
+            modelBuilder.Entity<Subcategory>()
+    .HasOne(s => s.Parent)
+    .WithMany(s => s.Children)
+    .HasForeignKey(s => s.ParentId)
+    .OnDelete(DeleteBehavior.Restrict);
 
             // ======================
             // USER ROLE

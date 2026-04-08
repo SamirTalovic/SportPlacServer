@@ -88,10 +88,30 @@ namespace SportPlac.Controllers
         [HttpDelete("users/{id}")]
         public async Task<IActionResult> DeleteUser(Guid id)
         {
-            var user = await _context.Users.FindAsync(id);
-            if (user == null) return NotFound();
+            var user = await _context.Users
+         .Include(u => u.Store)
+         .ThenInclude(s => s.Listings)
+         .FirstOrDefaultAsync(u => u.Id == id);
 
+            if (user == null)
+                return NotFound();
+
+            // 🧨 obriši listings
+            if (user.Store != null)
+            {
+                var listings = await _context.Listings
+                    .Where(l => l.StoreId == user.Store.Id)
+                    .ToListAsync();
+
+                _context.Listings.RemoveRange(listings);
+
+                // 🧨 obriši store
+                _context.Stores.Remove(user.Store);
+            }
+
+            // 🧨 obriši user
             _context.Users.Remove(user);
+
             await _context.SaveChangesAsync();
 
             return Ok();

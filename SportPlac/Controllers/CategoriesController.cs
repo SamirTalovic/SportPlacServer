@@ -17,32 +17,46 @@ namespace SportPlac.Controllers
         {
             _context = context;
         }
+        private List<SubcategoryTreeDto> BuildTree(
+    List<Subcategory> parents,
+    List<Subcategory> all)
+        {
+            return parents.Select(p => new SubcategoryTreeDto
+            {
+                Id = p.Id,
+                Name = p.Name,
+                Children = BuildTree(
+                    all.Where(x => x.ParentId == p.Id).ToList(),
+                    all
+                )
+            }).ToList();
+        }
+
         [HttpGet]
         public async Task<IActionResult> GetCategories()
         {
             var categories = await _context.Categories
-                .AsNoTracking()
+                .Include(c => c.Subcategories)
                 .Where(c => c.IsActive)
                 .OrderBy(c => c.SortOrder)
-                .Select(c => new CategoryDto
-                {
-                    Id = c.Id,
-                    Name = c.Name,
-                    Icon = c.Icon,
-                    SortOrder = c.SortOrder,
-
-                    Subcategories = c.Subcategories
-                        .Where(s => s.IsActive)
-                        .Select(s => new SubcategoryDto
-                        {
-                            Id = s.Id,
-                            Name = s.Name
-                        }).ToList()
-                })
                 .ToListAsync();
 
-            return Ok(categories);
+            var result = categories.Select(c => new
+            {
+                c.Id,
+                c.Name,
+                c.Icon,
+                c.SortOrder,
+
+                Subcategories = BuildTree(
+                    c.Subcategories.Where(s => s.ParentId == null).ToList(),
+                    c.Subcategories.ToList()
+                )
+            });
+
+            return Ok(result);
         }
+
         [Authorize(Roles = "Admin")]
         [HttpPost]
         public async Task<IActionResult> CreateCategory(CreateCategoryDto dto)
@@ -107,22 +121,22 @@ namespace SportPlac.Controllers
         public async Task<IActionResult> AddSubcategory(Guid id, CreateSubcategoryDto dto)
         {
             var category = await _context.Categories.FindAsync(id);
-
             if (category == null) return NotFound();
 
             var sub = new Subcategory
             {
                 Id = Guid.NewGuid(),
                 Name = dto.Name,
-                CategoryId = id
+                CategoryId = id,
+                ParentId = dto.ParentId
             };
 
             _context.Subcategories.Add(sub);
-
             await _context.SaveChangesAsync();
 
             return Ok(sub);
         }
+
         [Authorize(Roles = "Admin")]
         [HttpDelete("{id}/subcategories/{subId}")]
         public async Task<IActionResult> DeleteSubcategory(Guid id, Guid subId)

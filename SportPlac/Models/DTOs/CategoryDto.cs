@@ -15,6 +15,14 @@
         public Guid Id { get; set; }
         public string Name { get; set; }
     }
+    public class SubcategoryTreeDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; }
+
+        public List<SubcategoryTreeDto> Children { get; set; } = new();
+    }
+
     public class CreateCategoryDto
     {
         public string Name { get; set; }
@@ -25,6 +33,7 @@
     public class CreateSubcategoryDto
     {
         public string Name { get; set; }
+        public Guid? ParentId { get; set; }
     }
 
 }
