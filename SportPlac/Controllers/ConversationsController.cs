@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using SportPlac.Data;
 using SportPlac.Models;
 using SportPlac.Services;
+using SportPlac.Services.SportPlac.Services;
 
 namespace SportPlac.Controllers
 {
@@ -16,15 +17,18 @@ namespace SportPlac.Controllers
         private readonly AppDbContext _context;
         private readonly IHubContext<ChatHub> _hub;
         private readonly CloudinaryService _cloudinary;
+        private readonly EmailService _emailService;
 
         public ConversationsController(
             AppDbContext context,
             IHubContext<ChatHub> hub,
-            CloudinaryService cloudinary)
+            CloudinaryService cloudinary,
+            EmailService emailService)
         {
             _context = context;
             _hub = hub;
             _cloudinary = cloudinary;
+            _emailService = emailService;
         }
 
         [HttpGet("count/unread")]

@@ -88,10 +88,30 @@ namespace SportPlac.Controllers
         [HttpDelete("users/{id}")]
         public async Task<IActionResult> DeleteUser(Guid id)
         {
-            var user = await _context.Users.FindAsync(id);
-            if (user == null) return NotFound();
+            var user = await _context.Users
+         .Include(u => u.Store)
+         .ThenInclude(s => s.Listings)
+         .FirstOrDefaultAsync(u => u.Id == id);
 
+            if (user == null)
+                return NotFound();
+
+            // 🧨 obriši listings
+            if (user.Store != null)
+            {
+                var listings = await _context.Listings
+                    .Where(l => l.StoreId == user.Store.Id)
+                    .ToListAsync();
+
+                _context.Listings.RemoveRange(listings);
+
+                // 🧨 obriši store
+                _context.Stores.Remove(user.Store);
+            }
+
+            // 🧨 obriši user
             _context.Users.Remove(user);
+
             await _context.SaveChangesAsync();
 
             return Ok();
@@ -232,83 +252,5 @@ namespace SportPlac.Controllers
             return Ok(settings);
         }
 
-    }
-}
-            if (listing == null) return;
-
-            var conversations = await _context.Conversations
-                .Where(c => c.ListingId == id)
-                .ToListAsync();
-            
-            foreach (var conv in conversations)
-            {
-                var messages = await _context.Messages
-                    .Where(m => m.ConversationId == conv.Id)
-                    .ToListAsync();
-                _context.Messages.RemoveRange(messages);
-
-                var participants = await _context.ConversationParticipants
-                    .Where(cp => cp.ConversationId == conv.Id)
-                    .ToListAsync();
-                _context.ConversationParticipants.RemoveRange(participants);
-            }
-
-            _context.Conversations.RemoveRange(conversations);
-
-            var likes = await _context.Likes.Where(l => l.ListingId == id).ToListAsync();
-            _context.Likes.RemoveRange(likes);
-
-            _context.ListingImages.RemoveRange(listing.Images);
-            _context.ListingReports.RemoveRange(listing.Reports);
-            _context.ListingTags.RemoveRange(listing.Tags);
-
-            _context.Listings.Remove(listing);
-        }
-
-        [HttpGet("subscriptions")]
-        public async Task<IActionResult> Subs()
-        {
-            var data = await _context.Subscriptions
-                .Select(s => new
-                {
-                    s.Id,
-                    s.Plan,
-                    s.Amount,
-                    s.StartDate
-                })
-                .ToListAsync();
-
-            return Ok(data);
-        }
-
-        [HttpGet("settings")]
-        public async Task<IActionResult> GetSettings()
-        {
-            var settings = await _settingsService.GetSettingsAsync();
-            return Ok(settings);
-        }
-
-        [HttpPut("settings")]
-        public async Task<IActionResult> UpdateSettings(UpdateSettingsDto dto)
-        {
-            var settings = await _context.SiteSettings.FirstOrDefaultAsync();
-
-            if (settings == null)
-            {
-                settings = new SiteSettings { Id = Guid.NewGuid() };
-                _context.SiteSettings.Add(settings);
-            }
-
-            settings.MetaPixelId = dto.MetaPixelId;
-            settings.GooglePixelId = dto.GooglePixelId;
-            settings.AutoWebPConversion = dto.AutoWebPConversion;
-            settings.SeoImageRenamer = dto.SeoImageRenamer;
-
-            settings.UpdatedAt = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
-
-            return Ok(settings);
-        }
     }
 }

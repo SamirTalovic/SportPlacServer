@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using SportPlac.Data;
 
@@ -11,9 +12,11 @@ using SportPlac.Data;
 namespace SportPlac.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260406224223_Cascadeuser")]
+    partial class Cascadeuser
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -490,14 +493,9 @@ namespace SportPlac.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<Guid?>("ParentId")
-                        .HasColumnType("uniqueidentifier");
-
                     b.HasKey("Id");
 
                     b.HasIndex("CategoryId");
-
-                    b.HasIndex("ParentId");
 
                     b.ToTable("Subcategories");
                 });
@@ -821,14 +819,7 @@ namespace SportPlac.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("SportPlac.Models.Subcategory", "Parent")
-                        .WithMany("Children")
-                        .HasForeignKey("ParentId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
                     b.Navigation("Category");
-
-                    b.Navigation("Parent");
                 });
 
             modelBuilder.Entity("SportPlac.Models.Subscription", b =>
@@ -885,11 +876,6 @@ namespace SportPlac.Migrations
                     b.Navigation("Listings");
 
                     b.Navigation("Reviews");
-                });
-
-            modelBuilder.Entity("SportPlac.Models.Subcategory", b =>
-                {
-                    b.Navigation("Children");
                 });
 
             modelBuilder.Entity("SportPlac.Models.User", b =>

@@ -1,4 +1,4 @@
-﻿namespace SportPlac.Models.DTOs
+namespace SportPlac.Models.DTOs
 {
     public class CreateListingDto
     {

@@ -17,7 +17,7 @@ namespace SportPlac.Controllers
         private readonly CloudinaryService _cloudinary;
         private readonly IHubContext<ListingHub> _listingHub;
 
-        public ListingsController(AppDbContext context, CloudinaryService cloudinary,IHubContext<ListingHub> listingHub)
+        public ListingsController(AppDbContext context, CloudinaryService cloudinary, IHubContext<ListingHub> listingHub)
         {
             _context = context;
             _cloudinary = cloudinary;
@@ -26,12 +26,13 @@ namespace SportPlac.Controllers
 
         [HttpGet]
         public async Task<IActionResult> GetListings(
-    string? search,
-    Guid? categoryId,
-    decimal? minPrice,
-    decimal? maxPrice,
-    int page = 1,
-    int pageSize = 10)
+            string? search,
+            Guid? categoryId,
+            Guid? subcategoryId,
+            decimal? minPrice,
+            decimal? maxPrice,
+            int page = 1,
+            int pageSize = 10)
         {
             var query = _context.Listings.AsNoTracking()
                 .Where(l => l.Status == ListingStatus.Active);
@@ -41,6 +42,9 @@ namespace SportPlac.Controllers
 
             if (categoryId.HasValue)
                 query = query.Where(l => l.CategoryId == categoryId);
+
+            if (subcategoryId.HasValue)
+                query = query.Where(l => l.SubcategoryId == subcategoryId);
 
             if (minPrice.HasValue)
                 query = query.Where(l => l.Price >= minPrice);
@@ -69,6 +73,7 @@ namespace SportPlac.Controllers
 
             return Ok(listings);
         }
+
         [HttpGet("{id}")]
         public async Task<IActionResult> GetListing(Guid id)
         {
@@ -80,11 +85,14 @@ namespace SportPlac.Controllers
                     l.Title,
                     l.Description,
                     l.Price,
+                    l.Currency,
                     l.Location,
                     l.Condition,
                     l.Brand,
+                    l.CategoryId,
+                    l.SubcategoryId,
 
-                    Images = l.Images.Select(i => i.ImageUrl),
+                    Images = l.Images.OrderBy(i => i.SortOrder).Select(i => i.ImageUrl),
                     Tags = l.Tags.Select(t => t.Tag),
 
                     Seller = new
@@ -104,13 +112,16 @@ namespace SportPlac.Controllers
 
             if (listing == null) return NotFound();
 
-            // povećaj views
             var entity = await _context.Listings.FindAsync(id);
-            entity.ViewsCount++;
-            await _context.SaveChangesAsync();
+            if (entity != null)
+            {
+                entity.ViewsCount++;
+                await _context.SaveChangesAsync();
+            }
 
             return Ok(listing);
         }
+
         [Authorize]
         [HttpPost]
         public async Task<IActionResult> CreateListing([FromForm] CreateListingDto dto)
@@ -143,28 +154,18 @@ namespace SportPlac.Controllers
 
             _context.Listings.Add(listing);
 
-            // TAGS
             if (dto.Tags != null)
             {
-                listing.Tags = dto.Tags.Select(t => new ListingTag
-                {
-                    Id = Guid.NewGuid(),
-                    Tag = t
-                }).ToList();
+                listing.Tags = dto.Tags.Select(t => new ListingTag { Id = Guid.NewGuid(), Tag = t }).ToList();
             }
-
-            // IMAGES (max 8)
-            if (dto.Images != null && dto.Images.Count > 8)
-                return BadRequest("Max 8 images");
 
             if (dto.Images != null)
             {
+                if (dto.Images.Count > 8) return BadRequest("Max 8 images");
                 int order = 0;
-
                 foreach (var file in dto.Images)
                 {
                     var url = await _cloudinary.UploadImageAsync(file);
-
                     listing.Images.Add(new ListingImage
                     {
                         Id = Guid.NewGuid(),
@@ -172,7 +173,6 @@ namespace SportPlac.Controllers
                         SortOrder = order,
                         IsPrimary = order == 0
                     });
-
                     order++;
                 }
             }
@@ -186,90 +186,121 @@ namespace SportPlac.Controllers
                 listing.Price,
                 listing.Location,
                 listing.CreatedAt,
-                Store = new
-                {
-                    store.Id,
-                    store.Name
-                },
+                Store = new { store.Id, store.Name },
                 Image = listing.Images.FirstOrDefault()?.ImageUrl
             });
 
             return Ok(listing.Id);
         }
-         [Authorize]
+
+        [Authorize]
         [HttpPut("{id}")]
-public async Task<IActionResult> UpdateListing(Guid id, [FromForm] CreateListingDto dto)
+        public async Task<IActionResult> UpdateListing(Guid id, [FromForm] CreateListingDto dto)
         {
-            var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
-                          ?? User.FindFirst("sub")?.Value;
-            if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
-            var userId = Guid.Parse(userIdStr);
-
-            var listing = await _context.Listings
-                .Include(l => l.Tags)
-                .Include(l => l.Images)
-                .FirstOrDefaultAsync(l => l.Id == id && l.SellerId == userId);
-
-            if (listing == null) return NotFound();
-
-            listing.Title = dto.Title;
-            listing.Description = dto.Description;
-            listing.Price = dto.Price;
-            listing.Location = dto.Location;
-
-            // 🔥 TAGS UPDATE
-            listing.Tags.Clear();
-            if (dto.Tags != null)
+            try
             {
-                listing.Tags = dto.Tags.Select(t => new ListingTag
+                var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                              ?? User.FindFirst("sub")?.Value;
+                if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
+                var userId = Guid.Parse(userIdStr);
+
+                var listing = await _context.Listings
+                    .Include(l => l.Tags)
+                    .Include(l => l.Images)
+                    .FirstOrDefaultAsync(l => l.Id == id && l.SellerId == userId);
+
+                if (listing == null) return NotFound();
+
+                Console.WriteLine($"--- UPDATE START: {id} ---");
+
+                listing.Title = dto.Title;
+                listing.Description = dto.Description;
+                listing.Price = dto.Price;
+                listing.Location = dto.Location;
+                listing.CategoryId = dto.CategoryId;
+                listing.SubcategoryId = dto.SubcategoryId;
+                listing.Condition = dto.Condition;
+                listing.Brand = dto.Brand;
+                listing.Currency = dto.Currency ?? "RSD";
+
+                // 1. DELETE OLD TAGS & IMAGES (Atomic Step)
+                var oldTags = await _context.ListingTags.Where(t => t.ListingId == id).ToListAsync();
+                if (oldTags.Any()) _context.ListingTags.RemoveRange(oldTags);
+
+                var oldImages = await _context.ListingImages.Where(i => i.ListingId == id).ToListAsync();
+                if (oldImages.Any()) _context.ListingImages.RemoveRange(oldImages);
+
+                await _context.SaveChangesAsync(); // Force delete now
+
+                // 2. ADD NEW TAGS
+                if (dto.Tags != null)
                 {
-                    Id = Guid.NewGuid(),
-                    Tag = t
-                }).ToList();
-            }
-
-            // 🔥 IMAGES UPDATE
-            if (dto.Images != null && dto.Images.Count > 8)
-                return BadRequest("Max 8 images");
-
-            if (dto.Images != null && dto.Images.Count > 0)
-            {
-                // obriši stare slike
-                _context.ListingImages.RemoveRange(listing.Images);
-
-                listing.Images.Clear();
-
-                int order = 0;
-
-                foreach (var file in dto.Images)
-                {
-                    var url = await _cloudinary.UploadImageAsync(file);
-
-                    listing.Images.Add(new ListingImage
-                    {
-                        Id = Guid.NewGuid(),
-                        ImageUrl = url,
-                        SortOrder = order,
-                        IsPrimary = order == 0
-                    });
-
-                    order++;
+                    foreach (var tag in dto.Tags)
+                        _context.ListingTags.Add(new ListingTag { Id = Guid.NewGuid(), ListingId = id, Tag = tag });
                 }
+
+                // 3. ADD NEW IMAGES
+                if (dto.Images != null && dto.Images.Count > 0)
+                {
+                    if (dto.Images.Count > 8) return BadRequest("Max 8 images");
+
+                    var newUrls = new List<string>();
+                    foreach (var file in dto.Images)
+                    {
+                        var url = await _cloudinary.UploadImageAsync(file);
+                        if (url != null) newUrls.Add(url);
+                    }
+
+                    int order = 0;
+                    foreach (var url in newUrls)
+                    {
+                        _context.ListingImages.Add(new ListingImage
+                        {
+                            Id = Guid.NewGuid(),
+                            ListingId = id,
+                            ImageUrl = url,
+                            SortOrder = order,
+                            IsPrimary = order == 0
+                        });
+                        order++;
+                    }
+                }
+
+                // 4. UPDATE LISTING FIELDS
+                listing.Title = dto.Title;
+                listing.Description = dto.Description;
+                listing.Price = dto.Price;
+                listing.Location = dto.Location;
+                listing.CategoryId = dto.CategoryId;
+                listing.SubcategoryId = dto.SubcategoryId;
+                listing.Condition = dto.Condition;
+                listing.Brand = dto.Brand;
+                listing.Currency = dto.Currency ?? "RSD";
+
+                await _context.SaveChangesAsync(); // Final save
+                Console.WriteLine("Update successful!");
+
+                // Refresh images for hub
+                var updatedImages = await _context.ListingImages.Where(i => i.ListingId == id).ToListAsync();
+
+                await _listingHub.Clients.All.SendAsync("ListingUpdated", new
+                {
+                    listing.Id,
+                    listing.Title,
+                    listing.Price,
+                    listing.Location,
+                    Image = updatedImages.OrderBy(i => i.SortOrder).Select(i => i.ImageUrl).FirstOrDefault()
+                });
+
+                return Ok();
             }
-
-            await _context.SaveChangesAsync();
-
-            // 🔥 SOCKET
-            await _listingHub.Clients.All.SendAsync("ListingUpdated", new
+            catch (Exception ex)
             {
-                listing.Id,
-                listing.Title,
-                listing.Price,
-                listing.Location,
-                Image = listing.Images.FirstOrDefault()?.ImageUrl
-            });
-
-            return Ok();
+                Console.WriteLine("FATAL ERROR IN UpdateListing:");
+                Console.WriteLine(ex.Message);
+                if (ex.InnerException != null) Console.WriteLine($"INNER: {ex.InnerException.Message}");
+                return StatusCode(500, ex.Message);
+            }
         }
 
         [Authorize]
@@ -294,13 +325,12 @@ public async Task<IActionResult> UpdateListing(Guid id, [FromForm] CreateListing
             _context.ListingTags.RemoveRange(listing.Tags);
             _context.Likes.RemoveRange(listing.Likes);
             _context.ListingReports.RemoveRange(listing.Reports);
-
             _context.Listings.Remove(listing);
 
             await _context.SaveChangesAsync();
-
             return Ok();
         }
+
         [Authorize]
         [HttpPatch("{id}/status")]
         public async Task<IActionResult> ChangeStatus(Guid id, ListingStatus status)
@@ -316,11 +346,10 @@ public async Task<IActionResult> UpdateListing(Guid id, [FromForm] CreateListing
             if (listing == null) return NotFound();
 
             listing.Status = status;
-
             await _context.SaveChangesAsync();
-
             return Ok();
         }
+
         [Authorize]
         [HttpPost("{id}/promote")]
         public async Task<IActionResult> Promote(Guid id)
@@ -337,11 +366,10 @@ public async Task<IActionResult> UpdateListing(Guid id, [FromForm] CreateListing
 
             listing.IsPromoted = true;
             listing.RenewedAt = DateTime.UtcNow;
-
             await _context.SaveChangesAsync();
-
             return Ok();
         }
+
         [Authorize]
         [HttpPost("{id}/like")]
         public async Task<IActionResult> Like(Guid id)
@@ -356,15 +384,8 @@ public async Task<IActionResult> UpdateListing(Guid id, [FromForm] CreateListing
 
             if (exists) return BadRequest("Already liked");
 
-            _context.Likes.Add(new Like
-            {
-                Id = Guid.NewGuid(),
-                UserId = userId,
-                ListingId = id
-            });
-
+            _context.Likes.Add(new Like { Id = Guid.NewGuid(), UserId = userId, ListingId = id });
             await _context.SaveChangesAsync();
-
             return Ok();
         }
 
@@ -383,14 +404,13 @@ public async Task<IActionResult> UpdateListing(Guid id, [FromForm] CreateListing
             if (like == null) return NotFound();
 
             _context.Likes.Remove(like);
-
             await _context.SaveChangesAsync();
-
             return Ok();
         }
+
         [Authorize]
         [HttpPost("{id}/report")]
-        public async Task<IActionResult> Report(Guid id, string reason)
+        public async Task<IActionResult> Report(Guid id, [FromBody] string reason)
         {
             var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value 
                           ?? User.FindFirst("sub")?.Value;
@@ -406,12 +426,12 @@ public async Task<IActionResult> UpdateListing(Guid id, [FromForm] CreateListing
             });
 
             var listing = await _context.Listings.FindAsync(id);
-            listing.ReportsCount++;
+            if (listing != null) listing.ReportsCount++;
 
             await _context.SaveChangesAsync();
-
             return Ok();
         }
+
         [Authorize]
         [HttpGet("my")]
         public async Task<IActionResult> MyListings()
@@ -429,14 +449,12 @@ public async Task<IActionResult> UpdateListing(Guid id, [FromForm] CreateListing
                     l.Title,
                     l.Price,
                     l.Status,
-                    l.ViewsCount
+                    l.ViewsCount,
+                    Image = l.Images.OrderBy(i => i.SortOrder).Select(i => i.ImageUrl).FirstOrDefault()
                 })
                 .ToListAsync();
 
             return Ok(listings);
         }
-
-
-
     }
 }

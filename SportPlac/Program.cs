@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using SportPlac.Data;
 using SportPlac.Services;
+using SportPlac.Services.SportPlac.Services;
 using System.Text;
 using System.Text.Json.Serialization;
 
@@ -12,13 +13,15 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
-        // Preserve object references to avoid circular JSON serialization issues
         options.JsonSerializerOptions.ReferenceHandler = ReferenceHandler.Preserve;
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
 builder.Services.AddSignalR();
 builder.Services.AddScoped<JwtService>();
 builder.Services.AddScoped<CloudinaryService>();
 builder.Services.AddScoped<ISettingsService, SettingsService>();
+builder.Services.AddScoped<EmailService>();
+
 builder.Services.AddAuthentication("Bearer")
     .AddJwtBearer("Bearer", options =>
     {
