@@ -9,6 +9,7 @@
         public Guid? ParentId { get; set; }
         public Subcategory? Parent { get; set; }
         public ICollection<Subcategory> Children { get; set; } = new List<Subcategory>();
+        public int SortOrder { get; set; }
         public Category Category { get; set; } = null!;
     }
 }

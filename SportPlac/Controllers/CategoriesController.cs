@@ -21,7 +21,8 @@ namespace SportPlac.Controllers
     List<Subcategory> parents,
     List<Subcategory> all)
         {
-            return parents.Select(p => new SubcategoryTreeDto
+            return parents
+                .OrderBy(p => p.SortOrder).Select(p => new SubcategoryTreeDto
             {
                 Id = p.Id,
                 Name = p.Name,
@@ -124,12 +125,17 @@ namespace SportPlac.Controllers
             var category = await _context.Categories.FindAsync(id);
             if (category == null) return NotFound();
 
+            var lastOrder = await _context.Subcategories
+    .Where(s => s.CategoryId == id && s.ParentId == dto.ParentId)
+    .MaxAsync(s => (int?)s.SortOrder) ?? 0;
+
             var sub = new Subcategory
             {
                 Id = Guid.NewGuid(),
                 Name = dto.Name,
                 CategoryId = id,
-                ParentId = dto.ParentId
+                ParentId = dto.ParentId,
+                SortOrder = lastOrder + 1
             };
 
             _context.Subcategories.Add(sub);
