@@ -28,16 +28,17 @@ namespace SportPlac.Services
             var uploadParams = new ImageUploadParams
             {
                 File = new FileDescription(file.FileName, stream),
-                Folder = "sportplac/users",
-                Transformation = new Transformation()
-                    .Width(300)
-                    .Height(300)
-                    .Crop("fill")
+                Folder = "sportplac/users"
             };
 
             var result = await _cloudinary.UploadAsync(uploadParams);
 
-            return result.SecureUrl.ToString();
+            if (result.Error != null)
+            {
+                throw new Exception(result.Error.Message);
+            }
+
+            return result.SecureUrl?.ToString();
         }
     }
 }
