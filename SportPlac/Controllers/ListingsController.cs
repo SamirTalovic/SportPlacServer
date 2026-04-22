@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
@@ -210,7 +210,10 @@ namespace SportPlac.Controllers
             {
                 var userIdStr = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
                               ?? User.FindFirst("sub")?.Value;
-                if (string.IsNullOrEmpty(userIdStr)) return Unauthorized();
+
+                if (string.IsNullOrEmpty(userIdStr))
+                    return Unauthorized();
+
                 var userId = Guid.Parse(userIdStr);
 
                 var listing = await _context.Listings
@@ -218,10 +221,12 @@ namespace SportPlac.Controllers
                     .Include(l => l.Images)
                     .FirstOrDefaultAsync(l => l.Id == id && l.SellerId == userId);
 
-                if (listing == null) return NotFound();
+                if (listing == null)
+                    return NotFound();
 
                 Console.WriteLine($"--- UPDATE START: {id} ---");
 
+                // ✅ UPDATE OSNOVNIH POLJA
                 listing.Title = dto.Title;
                 listing.Description = dto.Description;
                 listing.Price = dto.Price;
@@ -232,65 +237,86 @@ namespace SportPlac.Controllers
                 listing.Brand = dto.Brand;
                 listing.Currency = dto.Currency ?? "RSD";
 
-                // 1. DELETE OLD TAGS & IMAGES (Atomic Step)
-                var oldTags = await _context.ListingTags.Where(t => t.ListingId == id).ToListAsync();
-                if (oldTags.Any()) _context.ListingTags.RemoveRange(oldTags);
-
-                var oldImages = await _context.ListingImages.Where(i => i.ListingId == id).ToListAsync();
-                if (oldImages.Any()) _context.ListingImages.RemoveRange(oldImages);
-
-                await _context.SaveChangesAsync(); // Force delete now
-
-                // 2. ADD NEW TAGS
+                // =========================
+                // ✅ TAGOVI (samo ako poslati)
+                // =========================
                 if (dto.Tags != null)
                 {
+                    var oldTags = await _context.ListingTags
+                        .Where(t => t.ListingId == id)
+                        .ToListAsync();
+
+                    if (oldTags.Any())
+                        _context.ListingTags.RemoveRange(oldTags);
+
                     foreach (var tag in dto.Tags)
-                        _context.ListingTags.Add(new ListingTag { Id = Guid.NewGuid(), ListingId = id, Tag = tag });
-                }
-
-                // 3. ADD NEW IMAGES
-                if (dto.Images != null && dto.Images.Count > 0)
-                {
-                    if (dto.Images.Count > 8) return BadRequest("Max 8 images");
-
-                    var newUrls = new List<string>();
-                    foreach (var file in dto.Images)
                     {
-                        var url = await _cloudinary.UploadImageAsync(file);
-                        if (url != null) newUrls.Add(url);
-                    }
-
-                    int order = 0;
-                    foreach (var url in newUrls)
-                    {
-                        _context.ListingImages.Add(new ListingImage
+                        _context.ListingTags.Add(new ListingTag
                         {
                             Id = Guid.NewGuid(),
                             ListingId = id,
-                            ImageUrl = url,
-                            SortOrder = order,
-                            IsPrimary = order == 0
+                            Tag = tag
                         });
-                        order++;
                     }
                 }
 
-                // 4. UPDATE LISTING FIELDS
-                listing.Title = dto.Title;
-                listing.Description = dto.Description;
-                listing.Price = dto.Price;
-                listing.Location = dto.Location;
-                listing.CategoryId = dto.CategoryId;
-                listing.SubcategoryId = dto.SubcategoryId;
-                listing.Condition = dto.Condition;
-                listing.Brand = dto.Brand;
-                listing.Currency = dto.Currency ?? "RSD";
+                // =========================
+                // ✅ SLIKE (KLJUČNA LOGIKA)
+                // =========================
+                if (dto.Images != null)
+                {
+                    var oldImages = await _context.ListingImages
+                        .Where(i => i.ListingId == id)
+                        .ToListAsync();
 
-                await _context.SaveChangesAsync(); // Final save
+                    if (oldImages.Any())
+                        _context.ListingImages.RemoveRange(oldImages);
+
+                    // Ako je lista prazna → obrisao sve slike
+                    if (dto.Images.Count > 0)
+                    {
+                        if (dto.Images.Count > 8)
+                            return BadRequest("Max 8 images");
+
+                        var newUrls = new List<string>();
+
+                        foreach (var file in dto.Images)
+                        {
+                            var url = await _cloudinary.UploadImageAsync(file);
+                            if (url != null)
+                                newUrls.Add(url);
+                        }
+
+                        int order = 0;
+                        foreach (var url in newUrls)
+                        {
+                            _context.ListingImages.Add(new ListingImage
+                            {
+                                Id = Guid.NewGuid(),
+                                ListingId = id,
+                                ImageUrl = url,
+                                SortOrder = order,
+                                IsPrimary = order == 0
+                            });
+                            order++;
+                        }
+                    }
+                }
+
+                // =========================
+                // 💾 SAVE
+                // =========================
+                await _context.SaveChangesAsync();
+
                 Console.WriteLine("Update successful!");
 
-                // Refresh images for hub
-                var updatedImages = await _context.ListingImages.Where(i => i.ListingId == id).ToListAsync();
+                // =========================
+                // 🔄 SIGNALR UPDATE
+                // =========================
+                var updatedImages = await _context.ListingImages
+                    .Where(i => i.ListingId == id)
+                    .OrderBy(i => i.SortOrder)
+                    .ToListAsync();
 
                 await _listingHub.Clients.All.SendAsync("ListingUpdated", new
                 {
@@ -298,7 +324,7 @@ namespace SportPlac.Controllers
                     listing.Title,
                     listing.Price,
                     listing.Location,
-                    Image = updatedImages.OrderBy(i => i.SortOrder).Select(i => i.ImageUrl).FirstOrDefault()
+                    Image = updatedImages.Select(i => i.ImageUrl).FirstOrDefault()
                 });
 
                 return Ok();
@@ -307,10 +333,14 @@ namespace SportPlac.Controllers
             {
                 Console.WriteLine("FATAL ERROR IN UpdateListing:");
                 Console.WriteLine(ex.Message);
-                if (ex.InnerException != null) Console.WriteLine($"INNER: {ex.InnerException.Message}");
+
+                if (ex.InnerException != null)
+                    Console.WriteLine($"INNER: {ex.InnerException.Message}");
+
                 return StatusCode(500, ex.Message);
             }
         }
+
 
         [Authorize]
         [HttpDelete("{id}")]
